@@ -6,8 +6,8 @@ export default function VideoCallRoom() {
     useEffect(() => {
         async function startVideo() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                videoRef.current.srcObject = stream;
+                //const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                //videoRef.current.srcObject = stream;
             } catch (err) {
                 console.error('Failed to get media', err);
             }
