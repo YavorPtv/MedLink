@@ -4,7 +4,7 @@ import LandingPage from './components/LandingPage/LandingPage';
 // import LoginPage from './components/LoginPage/LoginPage';
 // import RegisterPage from './components/RegisterPage/RegisterPage';
 // import Dashboard from './components/Dashboard/Dashboard';
-// import VideoCallRoom from './components/VideoCallRoom/VideoCallRoom';
+import VideoCallRoom from './components/VideoCallRoom/VideoCallRoom';
 // import ImageAnnotation from './components/ImageAnnotation/ImageAnnotation';
 // import Transcripts from './components/Transcripts/Transcripts';
 // import Profile from './components/Profile/Profile';
@@ -18,7 +18,7 @@ function App() {
         {/* <Route path="/login" element={<LoginPage />} /> */}
         {/* <Route path="/register" element={<RegisterPage />} /> */}
         {/* <Route path="/dashboard" element={<Dashboard />} /> */}
-        {/* <Route path="/call/:roomId" element={<VideoCallRoom />} /> */}
+        <Route path="/call" element={<VideoCallRoom />} />
         {/* <Route path="/annotate/:imageId" element={<ImageAnnotation />} /> */}
         {/* <Route path="/transcripts/:callId" element={<Transcripts />} /> */}
         {/* <Route path="/profile" element={<Profile />} /> */}
