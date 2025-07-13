@@ -8,26 +8,28 @@ import VideoCallRoom from './components/VideoCallRoom/VideoCallRoom';
 import ImageAnnotation from './components/ImageAnnotation/ImageAnnotation';
 import Transcripts from './components/Transcripts/Transcripts';
 import Profile from './components/Profile/Profile';
+import Navbar from './components/Navbar/Navbar';
 
 function App() {
-  return (
-    <Router>
-      <Routes>
-        {/* Public routes */}
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/call" element={<VideoCallRoom />} />
-        <Route path="/annotate" element={<ImageAnnotation />} />
-        <Route path="/transcripts" element={<Transcripts />} />
-        <Route path="/profile" element={<Profile />} />
+	return (
+		<Router>
+			<Navbar />
+			<Routes>
+				{/* Public routes */}
+				<Route path="/" element={<LandingPage />} />
+				<Route path="/login" element={<Login />} />
+				<Route path="/register" element={<Register />} />
+				<Route path="/dashboard" element={<Dashboard />} />
+				<Route path="/call" element={<VideoCallRoom />} />
+				<Route path="/annotate" element={<ImageAnnotation />} />
+				<Route path="/transcripts" element={<Transcripts />} />
+				<Route path="/profile" element={<Profile />} />
 
-        {/* Catch all - redirect unknown routes to home */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Router>
-  );
+				{/* Catch all - redirect unknown routes to home */}
+				<Route path="*" element={<Navigate to="/" replace />} />
+			</Routes>
+		</Router>
+	);
 }
 
 export default App;
