@@ -13,7 +13,11 @@ import Navbar from './components/Navbar/Navbar';
 function App() {
 	return (
 		<Router>
-			<Navbar />
+			<header className="header_section">
+                <div className="container">
+                    <Navbar />
+                </div>
+            </header>
 			<Routes>
 				{/* Public routes */}
 				<Route path="/" element={<LandingPage />} />
