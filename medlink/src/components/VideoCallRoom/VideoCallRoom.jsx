@@ -1,101 +1,112 @@
-import { useEffect, useRef } from "react";
-import { io } from 'socket.io-client';
-
-const SERVER_URL = "http://localhost:5000";
-const ROOM_ID = "test-room"; // In real apps, generate or get from URL
+import React, { useEffect, useRef } from 'react';
+import {
+    ConsoleLogger,
+    DefaultDeviceController,
+    DefaultMeetingSession,
+    LogLevel,
+    MeetingSessionConfiguration,
+} from 'amazon-chime-sdk-js';
 
 export default function VideoCallRoom() {
-    const localVideoRef = useRef();
-    const remoteVideoRef = useRef();
-    const pcRef = useRef();
-    const socketRef = useRef();
+    const videoTilesRef = useRef({});
+    const sessionRef = useRef(null);
+    const videoObserverRef = useRef(null);
 
     useEffect(() => {
-        socketRef.current = io(SERVER_URL);
-
-        // Setup peer connection
-        pcRef.current = new RTCPeerConnection({
-            iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-        });
-
-        // When ICE candidates are found, send them to peer
-        pcRef.current.onicecandidate = (event) => {
-            if (event.candidate) {
-                console.log("Sending ICE candidate:", event.candidate);
-                socketRef.current.emit("ice-candidate", {
-                    roomId: ROOM_ID,
-                    candidate: event.candidate,
-                });
-            }
-        };
-
-        // When remote track arrives, show it in remote video element
-        pcRef.current.ontrack = (event) => {
-            if (remoteVideoRef.current) {
-                remoteVideoRef.current.srcObject = event.streams[0];
-            }
-        };
-
-        // Get local media and add tracks to peer connection
-        navigator.mediaDevices
-            .getUserMedia({ video: true, audio: true })
-            .then((stream) => {
-                if (localVideoRef.current) {
-                    localVideoRef.current.srcObject = stream;
-                }
-                stream.getTracks().forEach((track) => {
-                    pcRef.current.addTrack(track, stream);
-                });
-                // Join room
-                socketRef.current.emit("join-room", ROOM_ID);
-            });
-
-        // Someone joined room, create and send offer
-        socketRef.current.on("user-joined", async () => {
-            const offer = await pcRef.current.createOffer();
-            await pcRef.current.setLocalDescription(offer);
-            socketRef.current.emit("offer", { roomId: ROOM_ID, sdp: offer });
-        });
-
-        // Receive offer, create answer
-        socketRef.current.on("offer", async (data) => {
-            await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
-            const answer = await pcRef.current.createAnswer();
-            await pcRef.current.setLocalDescription(answer);
-            socketRef.current.emit("answer", { roomId: ROOM_ID, sdp: answer });
-        });
-
-        // Receive answer and set remote description
-        socketRef.current.on("answer", async (data) => {
-            await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
-        });
-
-        // Receive ICE candidate and add it to peer connection
-        socketRef.current.on("ice-candidate", async (data) => {
-            console.log("Received ICE candidate:", data.candidate);
+        const joinRoom = async () => {
             try {
-                await pcRef.current.addIceCandidate(data.candidate);
-            } catch (e) {
-                console.error("Error adding received ice candidate", e);
+                const uniqueUserName = `user-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+                const res = await fetch('http://localhost:5000/create-meeting', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ roomId: 'my-room-1', userName: uniqueUserName }),
+                });
+
+                const data = await res.json();
+
+                const logger = new ConsoleLogger('ChimeLogs', LogLevel.INFO);
+                const deviceController = new DefaultDeviceController(logger);
+                const configuration = new MeetingSessionConfiguration(data.Meeting, data.Attendee);
+                const meetingSession = new DefaultMeetingSession(configuration, logger, deviceController);
+
+                sessionRef.current = meetingSession;
+
+                const audioVideo = meetingSession.audioVideo;
+                await audioVideo.start();  // join the meeting first!
+
+                // List video devices and pick one
+                const videoDevices = await deviceController.listVideoInputDevices();
+                const chosenDeviceId = videoDevices[0]?.deviceId;
+
+                // Start video input and local video tile
+                await audioVideo.startVideoInput(chosenDeviceId);
+                audioVideo.startLocalVideoTile();
+
+                // Observer for video tiles
+                const videoObserver = {
+                    videoTileDidUpdate: (tileState) => {
+                        // Ignore if no bound attendee or tileId
+                        if (!tileState.boundAttendeeId || !tileState.tileId) return;
+                        if (tileState.isContent) return; // skip content share tiles
+
+                        let videoElement = videoTilesRef.current[tileState.tileId];
+
+                        if (!videoElement) {
+                            const container = document.getElementById('video-tiles');
+                            if (!container) return; // safety check
+
+                            videoElement = document.createElement('video');
+                            videoElement.autoplay = true;
+                            videoElement.muted = tileState.localTile; // mute local to avoid echo
+                            videoElement.style.width = '300px';
+                            videoElement.style.margin = '10px';
+
+                            container.appendChild(videoElement);
+                            videoTilesRef.current[tileState.tileId] = videoElement;
+                        }
+
+                        audioVideo.bindVideoElement(tileState.tileId, videoElement);
+                    },
+
+                    videoTileWasRemoved: (tileId) => {
+                        const videoElement = videoTilesRef.current[tileId];
+                        if (videoElement) {
+                            videoElement.remove();
+                            delete videoTilesRef.current[tileId];
+                        }
+                    },
+                };
+
+                videoObserverRef.current = videoObserver;
+                audioVideo.addObserver(videoObserver);
+
+            } catch (err) {
+                console.error('Error joining room', err);
             }
-        });
+        };
+
+        joinRoom();
 
         return () => {
-            socketRef.current.disconnect();
-            pcRef.current.close();
+            const currentSession = sessionRef.current;
+            if (currentSession) {
+                const audioVideo = currentSession.audioVideo;
+                if (audioVideo) {
+                    if (videoObserverRef.current) {
+                        audioVideo.removeObserver(videoObserverRef.current);
+                        videoObserverRef.current = null;
+                    }
+                    audioVideo.stopLocalVideoTile();
+                    audioVideo.stop();
+                }
+            }
         };
     }, []);
 
     return (
-        <div style={{ display: "flex", gap: 10 }}>
-            <div>
-                <h3>Local Video</h3>
-                <video ref={localVideoRef} autoPlay muted playsInline style={{ width: 300, border: "1px solid black" }} />
-            </div>
-            <div>
-                <h3>Remote Video</h3>
-                <video ref={remoteVideoRef} autoPlay playsInline style={{ width: 300, border: "1px solid black" }} />
-            </div>
+        <div>
+            <h1>Video Call Room</h1>
+            <div id="video-tiles" style={{ display: 'flex', flexWrap: 'wrap' }}></div>
         </div>
     );
 }

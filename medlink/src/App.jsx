@@ -9,22 +9,25 @@ import ImageAnnotation from './components/ImageAnnotation/ImageAnnotation';
 import Transcripts from './components/Transcripts/Transcripts';
 import Profile from './components/Profile/Profile';
 import Navbar from './components/Navbar/Navbar';
+import { ThemeProvider } from 'styled-components';
 
 function App() {
 	return (
 		<Router>
 			<header className="header_section">
-                <div className="container">
-                    <Navbar />
-                </div>
-            </header>
+				<div className="container">
+					<Navbar />
+				</div>
+			</header>
 			<Routes>
 				{/* Public routes */}
 				<Route path="/" element={<LandingPage />} />
 				<Route path="/login" element={<Login />} />
 				<Route path="/register" element={<Register />} />
 				<Route path="/dashboard" element={<Dashboard />} />
-				<Route path="/call" element={<VideoCallRoom />} />
+				<Route path="/call" element={
+						<VideoCallRoom />
+				} />
 				<Route path="/annotate" element={<ImageAnnotation />} />
 				<Route path="/transcripts" element={<Transcripts />} />
 				<Route path="/profile" element={<Profile />} />
