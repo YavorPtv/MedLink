@@ -17,25 +17,33 @@ const chimeClient = new ChimeSDKMeetingsClient({
 
 const meetings = {}; // simple in-memory map: roomId -> MeetingInfo
 
-app.post('/create-meeting', async (req, res) => {
-    const { roomId, userName } = req.body;
-
+app.post('/join-meeting', async (req, res) => {
+    const { roomId, userName, mode } = req.body;
     try {
         let meetingInfo = meetings[roomId];
-        if (!meetingInfo) {
-            // Create a new meeting in Chime
-            const createMeetingCmd = new CreateMeetingCommand({
-                ClientRequestToken: roomId,
-                MediaRegion: "eu-central-1",
-                ExternalMeetingId: roomId,
-            });
-            const meetingResponse = await chimeClient.send(createMeetingCmd);
-            meetingInfo = meetingResponse.Meeting;
-            meetings[roomId] = meetingInfo;
-            console.log(`Created new meeting for room ${roomId}`);
+
+        if (mode === 'join') {
+            if (!meetingInfo) {
+                return res.status(404).json({ error: "Meeting not found" });
+            }
+        } else if (mode === 'create') {
+            if (!meetingInfo) {
+                // Create new meeting
+                const createMeetingCmd = new CreateMeetingCommand({
+                    ClientRequestToken: roomId,
+                    MediaRegion: "eu-central-1",
+                    ExternalMeetingId: roomId,
+                });
+                const meetingResponse = await chimeClient.send(createMeetingCmd);
+                meetingInfo = meetingResponse.Meeting;
+                meetings[roomId] = meetingInfo;
+                console.log(`Created new meeting for room ${roomId}`);
+            }
+        } else {
+            return res.status(400).json({ error: "Invalid mode" });
         }
 
-        // Create an attendee for this user
+        // Create attendee for this user
         const createAttendeeCmd = new CreateAttendeeCommand({
             MeetingId: meetingInfo.MeetingId,
             ExternalUserId: userName || Math.random().toString(36).substring(2, 15),
@@ -47,10 +55,12 @@ app.post('/create-meeting', async (req, res) => {
             Attendee: attendeeResponse.Attendee
         });
     } catch (err) {
-        console.error("Failed to create meeting/attendee", err);
-        res.status(500).json({ error: "Failed to create meeting or attendee" });
+        console.error("Failed to join meeting", err);
+        res.status(500).json({ error: "Failed to join meeting" });
     }
 });
+
+
 
 const port = 5000;
 app.listen(port, () => {

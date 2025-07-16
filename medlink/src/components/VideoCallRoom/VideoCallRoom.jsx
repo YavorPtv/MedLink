@@ -10,7 +10,7 @@ import {
 import { MeetingSessionConfiguration } from 'amazon-chime-sdk-js';
 import { useRef } from 'react';
 
-export default function VideoCallRoom() {
+export default function VideoCallRoom({ meetingData, roomId, userName }) {
     const meetingManager = useMeetingManager();
     const audioVideo = useAudioVideo();
     const { toggleVideo } = useLocalVideo();
@@ -24,31 +24,10 @@ export default function VideoCallRoom() {
 
         (async () => {
             try {
-                const userName = `user-${Date.now()}`;
-                const res = await fetch('http://localhost:5000/create-meeting', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ roomId: 'my-room-2', userName }),
-                });
-                const data = await res.json();
-                console.log("MEETING DATA RECEIVED:", data);
-
+                const data = meetingData;
                 const configuration = new MeetingSessionConfiguration(
-                    {
-                        Meeting: {
-                            MeetingId: data.Meeting.MeetingId,
-                            ExternalMeetingId: data.Meeting.ExternalMeetingId,
-                            MediaRegion: data.Meeting.MediaRegion,
-                            MediaPlacement: data.Meeting.MediaPlacement
-                        }
-                    },
-                    {
-                        Attendee: {
-                            AttendeeId: data.Attendee.AttendeeId,
-                            ExternalUserId: data.Attendee.ExternalUserId,
-                            JoinToken: data.Attendee.JoinToken
-                        }
-                    }
+                    data.Meeting,
+                    data.Attendee
                 );
 
                 await meetingManager.join(configuration);
@@ -61,7 +40,7 @@ export default function VideoCallRoom() {
         return () => {
             meetingManager.leave();
         };
-    }, [meetingManager]);
+    }, [meetingData, meetingManager, roomId, userName]);
 
     // ••• 2) Start video as soon as we detect a camera •••
     useEffect(() => {

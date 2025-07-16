@@ -14,6 +14,7 @@ import {
   MeetingProvider,
   AudioVideoProvider,
 } from 'amazon-chime-sdk-component-library-react';
+import MeetingLobby from './components/MeetingLobby/MeetingLobby';
 
 function App() {
 	return (
@@ -29,11 +30,7 @@ function App() {
 				<Route path="/login" element={<Login />} />
 				<Route path="/register" element={<Register />} />
 				<Route path="/dashboard" element={<Dashboard />} />
-				<Route path="/call" element={
-					<AudioVideoProvider>
-						<VideoCallRoom />
-					</AudioVideoProvider>
-				} />
+				<Route path="/call" element={<MeetingLobby />} />
 				<Route path="/annotate" element={<ImageAnnotation />} />
 				<Route path="/transcripts" element={<Transcripts />} />
 				<Route path="/profile" element={<Profile />} />
