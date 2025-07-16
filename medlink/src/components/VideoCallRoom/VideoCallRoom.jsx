@@ -1,112 +1,92 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import {
-    ConsoleLogger,
-    DefaultDeviceController,
-    DefaultMeetingSession,
-    LogLevel,
-    MeetingSessionConfiguration,
-} from 'amazon-chime-sdk-js';
+    useMeetingManager,
+    useAudioVideo,
+    useLocalVideo,
+    useVideoInputs,
+    VideoTileGrid,
+    LocalVideo,
+} from 'amazon-chime-sdk-component-library-react';
+import { MeetingSessionConfiguration } from 'amazon-chime-sdk-js';
+import { useRef } from 'react';
 
 export default function VideoCallRoom() {
-    const videoTilesRef = useRef({});
-    const sessionRef = useRef(null);
-    const videoObserverRef = useRef(null);
+    const meetingManager = useMeetingManager();
+    const audioVideo = useAudioVideo();
+    const { toggleVideo } = useLocalVideo();
+    const { devices: videoDevices } = useVideoInputs();
+    const hasJoined = useRef(false);
 
+    // ••• 1) Join once on mount •••
     useEffect(() => {
-        const joinRoom = async () => {
+        if (hasJoined.current) return;
+        hasJoined.current = true;
+
+        (async () => {
             try {
-                const uniqueUserName = `user-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+                const userName = `user-${Date.now()}`;
                 const res = await fetch('http://localhost:5000/create-meeting', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ roomId: 'my-room-1', userName: uniqueUserName }),
+                    body: JSON.stringify({ roomId: 'my-room-2', userName }),
                 });
-
                 const data = await res.json();
+                console.log("MEETING DATA RECEIVED:", data);
 
-                const logger = new ConsoleLogger('ChimeLogs', LogLevel.INFO);
-                const deviceController = new DefaultDeviceController(logger);
-                const configuration = new MeetingSessionConfiguration(data.Meeting, data.Attendee);
-                const meetingSession = new DefaultMeetingSession(configuration, logger, deviceController);
-
-                sessionRef.current = meetingSession;
-
-                const audioVideo = meetingSession.audioVideo;
-                await audioVideo.start();  // join the meeting first!
-
-                // List video devices and pick one
-                const videoDevices = await deviceController.listVideoInputDevices();
-                const chosenDeviceId = videoDevices[0]?.deviceId;
-
-                // Start video input and local video tile
-                await audioVideo.startVideoInput(chosenDeviceId);
-                audioVideo.startLocalVideoTile();
-
-                // Observer for video tiles
-                const videoObserver = {
-                    videoTileDidUpdate: (tileState) => {
-                        // Ignore if no bound attendee or tileId
-                        if (!tileState.boundAttendeeId || !tileState.tileId) return;
-                        if (tileState.isContent) return; // skip content share tiles
-
-                        let videoElement = videoTilesRef.current[tileState.tileId];
-
-                        if (!videoElement) {
-                            const container = document.getElementById('video-tiles');
-                            if (!container) return; // safety check
-
-                            videoElement = document.createElement('video');
-                            videoElement.autoplay = true;
-                            videoElement.muted = tileState.localTile; // mute local to avoid echo
-                            videoElement.style.width = '300px';
-                            videoElement.style.margin = '10px';
-
-                            container.appendChild(videoElement);
-                            videoTilesRef.current[tileState.tileId] = videoElement;
-                        }
-
-                        audioVideo.bindVideoElement(tileState.tileId, videoElement);
-                    },
-
-                    videoTileWasRemoved: (tileId) => {
-                        const videoElement = videoTilesRef.current[tileId];
-                        if (videoElement) {
-                            videoElement.remove();
-                            delete videoTilesRef.current[tileId];
+                const configuration = new MeetingSessionConfiguration(
+                    {
+                        Meeting: {
+                            MeetingId: data.Meeting.MeetingId,
+                            ExternalMeetingId: data.Meeting.ExternalMeetingId,
+                            MediaRegion: data.Meeting.MediaRegion,
+                            MediaPlacement: data.Meeting.MediaPlacement
                         }
                     },
-                };
+                    {
+                        Attendee: {
+                            AttendeeId: data.Attendee.AttendeeId,
+                            ExternalUserId: data.Attendee.ExternalUserId,
+                            JoinToken: data.Attendee.JoinToken
+                        }
+                    }
+                );
 
-                videoObserverRef.current = videoObserver;
-                audioVideo.addObserver(videoObserver);
-
+                await meetingManager.join(configuration);
+                await meetingManager.start();
             } catch (err) {
-                console.error('Error joining room', err);
+                console.error('Error joining room:', err);
             }
-        };
-
-        joinRoom();
+        })();
 
         return () => {
-            const currentSession = sessionRef.current;
-            if (currentSession) {
-                const audioVideo = currentSession.audioVideo;
-                if (audioVideo) {
-                    if (videoObserverRef.current) {
-                        audioVideo.removeObserver(videoObserverRef.current);
-                        videoObserverRef.current = null;
-                    }
-                    audioVideo.stopLocalVideoTile();
-                    audioVideo.stop();
-                }
-            }
+            meetingManager.leave();
         };
-    }, []);
+    }, [meetingManager]);
+
+    // ••• 2) Start video as soon as we detect a camera •••
+    useEffect(() => {
+        if (!audioVideo || videoDevices.length === 0) return;
+
+        const device = videoDevices[0];
+        audioVideo
+            .startVideoInput(device.deviceId)
+            .then(() => {
+                toggleVideo();
+                console.log('Local video started');
+            })
+            .catch((e) => console.error('Could not start video input', e));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [audioVideo, videoDevices]);
 
     return (
         <div>
-            <h1>Video Call Room</h1>
-            <div id="video-tiles" style={{ display: 'flex', flexWrap: 'wrap' }}></div>
+            {/* <h1>Video Call Room (React SDK)</h1> */}
+            {/* <div className="video-container">
+                <LocalVideo className="chime-local-video" />
+            </div> */}
+            <div className="video-grid-container">
+                <VideoTileGrid className="chime-video-tile" />
+            </div>
         </div>
     );
 }

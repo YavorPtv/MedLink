@@ -10,6 +10,10 @@ import Transcripts from './components/Transcripts/Transcripts';
 import Profile from './components/Profile/Profile';
 import Navbar from './components/Navbar/Navbar';
 import { ThemeProvider } from 'styled-components';
+import {
+  MeetingProvider,
+  AudioVideoProvider,
+} from 'amazon-chime-sdk-component-library-react';
 
 function App() {
 	return (
@@ -26,7 +30,9 @@ function App() {
 				<Route path="/register" element={<Register />} />
 				<Route path="/dashboard" element={<Dashboard />} />
 				<Route path="/call" element={
+					<AudioVideoProvider>
 						<VideoCallRoom />
+					</AudioVideoProvider>
 				} />
 				<Route path="/annotate" element={<ImageAnnotation />} />
 				<Route path="/transcripts" element={<Transcripts />} />
