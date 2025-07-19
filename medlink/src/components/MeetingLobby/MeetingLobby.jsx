@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import VideoCallRoom from '../VideoCallRoom/VideoCallRoom';
+import { Card, CardContent, Typography, TextField, Button, Divider, List, ListItem, ListItemText } from '@mui/material';
 
 function generateRoomId() {
     return 'room-' + Math.random().toString(36).substr(2, 9);
@@ -81,53 +82,60 @@ export default function MeetingLobby() {
     }
 
     return (
-        <div className="max-w-md mx-auto p-4">
-            <h2 className="text-2xl font-bold mb-4">Start or Join a Meeting</h2>
-            <input
-                className="w-full mb-2 p-2 border"
-                type="text"
-                placeholder="Your Name"
-                value={userName}
-                onChange={e => setUserName(e.target.value)}
-            />
-            <button
-                className="bg-blue-500 text-white p-2 rounded mb-2 w-full"
-                onClick={handleCreateMeeting}
-            >
-                Create Meeting
-            </button>
-            <div className="flex mb-2">
-                <input
-                    className="flex-1 p-2 border"
-                    type="text"
-                    placeholder="Enter Room ID to Join"
+        <Card sx={{ maxWidth: 700, mx: 'auto', mt: 8, boxShadow: 3 }}>
+            <CardContent>
+                <Typography variant="h5" fontWeight="bold" mb={2}>Start or Join a Meeting</Typography>
+                <TextField
+                    label="Your Name"
+                    fullWidth
+                    value={userName}
+                    onChange={e => setUserName(e.target.value)}
+                    margin="normal"
+                />
+                <Button
+                    variant="contained"
+                    color="primary"
+                    fullWidth
+                    sx={{ mb: 2 }}
+                    onClick={handleCreateMeeting}
+                >
+                    Create Meeting
+                </Button>
+                <Divider sx={{ my: 2 }}>or</Divider>
+                <TextField
+                    label="Enter Room ID to Join"
+                    fullWidth
                     value={joinRoomId}
                     onChange={e => setJoinRoomId(e.target.value)}
+                    margin="normal"
                 />
-                <button
-                    className="bg-green-500 text-white px-4 py-2 rounded ml-2"
+                <Button
+                    variant="contained"
+                    color="success"
+                    fullWidth
+                    sx={{ mb: 2 }}
                     onClick={handleJoinMeeting}
                 >
                     Join
-                </button>
-            </div>
-            <div className="mt-6">
-                <h3 className="font-semibold mb-2">Previous Meetings</h3>
-                <ul>
+                </Button>
+                <Typography variant="subtitle1" mt={4} mb={1}>Previous Meetings</Typography>
+                <List>
+                    {meetingList.length === 0 && (
+                        <ListItem>
+                            <ListItemText primary="No previous meetings" />
+                        </ListItem>
+                    )}
                     {meetingList.map(id => (
-                        <li key={id} className="border-b py-1 flex justify-between items-center">
-                            <span>{id}</span>
-                            <button
-                                className="text-sm text-blue-500 underline"
-                                onClick={() => { setJoinRoomId(id); handleJoinMeeting(); }}
-                            >
+                        <ListItem key={id} secondaryAction={
+                            <Button size="small" onClick={() => { setJoinRoomId(id); handleJoinMeeting(); }}>
                                 Rejoin
-                            </button>
-                        </li>
+                            </Button>
+                        }>
+                            <ListItemText primary={id} />
+                        </ListItem>
                     ))}
-                    {meetingList.length === 0 && <li>No previous meetings</li>}
-                </ul>
-            </div>
-        </div>
+                </List>
+            </CardContent>
+        </Card>
     );
 }
