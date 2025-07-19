@@ -141,15 +141,16 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
                 </Paper>
             </Collapse>
 
-            {/* Main Content: Video grid + panels */}
             <Box sx={{ flex: 1, display: 'flex', minHeight: 0 }}>
                 {/* Video Grid */}
                 <Box sx={{
-                    flex: 1,
+                    flex: 1, // shrink when panel is open
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    p: 2
+                    transition: 'flex 0.3s',
+                    p: 2,
+                    minWidth: 0
                 }}>
                     <Box sx={{
                         width: '100%',
@@ -165,42 +166,42 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
                     </Box>
                 </Box>
 
-                {/* Chat Drawer */}
-                <Drawer
-                    anchor="right"
-                    open={showChat}
-                    onClose={() => setShowChat(false)}
-                    PaperProps={{ sx: { width: 340, bgcolor: '#f4fafd' } }}
-                >
-                    <Box sx={{ p: 2 }}>
-                        <Typography variant="h6">Chat</Typography>
-                        <Divider sx={{ my: 1 }} />
-                        <Box sx={{ height: 400, overflowY: 'auto' }}>
-                            {/* TODO: Chat messages here */}
-                            <Typography variant="body2" color="text.secondary">Chat goes here.</Typography>
-                        </Box>
-                        <Box sx={{ mt: 2 }}>
-                            {/* TODO: Chat input here */}
+                {/* Right Side Panel: Chat or Transcript */}
+                {(showChat || showTranscript) && (
+                    <Box sx={{
+                        width: 340,
+                        bgcolor: '#f4fafd',
+                        borderLeft: '1px solid #e0e0e0',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        height: '100%',
+                        transition: 'width 0.3s',
+                        minWidth: 0
+                    }}>
+                        <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', height: '100%' }}>
+                            <Typography variant="h6" sx={{ mb: 1 }}>
+                                {showChat ? "Chat" : "Transcription"}
+                            </Typography>
+                            <Divider sx={{ mb: 1 }} />
+                            <Box sx={{ flex: 1, overflowY: 'auto', mb: showChat ? 2 : 0 }}>
+                                {showChat ? (
+                                    <Typography variant="body2" color="text.secondary">
+                                        Chat goes here.
+                                    </Typography>
+                                ) : (
+                                    <Typography variant="body2" color="text.secondary">
+                                        Transcript goes here.
+                                    </Typography>
+                                )}
+                            </Box>
+                            {showChat && (
+                                <Box sx={{}}>
+                                    {/* TODO: Chat input here */}
+                                </Box>
+                            )}
                         </Box>
                     </Box>
-                </Drawer>
-
-                {/* Transcript Drawer */}
-                <Drawer
-                    anchor="right"
-                    open={showTranscript}
-                    onClose={() => setShowTranscript(false)}
-                    PaperProps={{ sx: { width: 340, bgcolor: '#f4fafd' } }}
-                >
-                    <Box sx={{ p: 2 }}>
-                        <Typography variant="h6">Transcription</Typography>
-                        <Divider sx={{ my: 1 }} />
-                        <Box sx={{ height: 400, overflowY: 'auto' }}>
-                            {/* TODO: Real-time transcript here */}
-                            <Typography variant="body2" color="text.secondary">Transcript goes here.</Typography>
-                        </Box>
-                    </Box>
-                </Drawer>
+                )}
             </Box>
 
             {/* Bottom Controls */}
