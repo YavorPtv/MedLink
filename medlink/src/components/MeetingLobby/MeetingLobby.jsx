@@ -32,7 +32,7 @@ export default function MeetingLobby() {
     const handleCreateMeeting = async () => {
         const newRoomId = generateRoomId();
         const name = userName || `user-${Date.now()}`;
-        const res = await fetch('http://localhost:5000/join-meeting', {
+        const res = await fetch('http://localhost:3000/join-meeting', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ roomId: newRoomId, userName: name, mode: "create" }),
@@ -54,7 +54,7 @@ export default function MeetingLobby() {
             return;
         }
         const name = userName || `user-${Date.now()}`;
-        const res = await fetch('http://localhost:5000/join-meeting', {
+        const res = await fetch('http://localhost:3000/join-meeting', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ roomId: joinRoomId, userName: name, mode: "join" }),

@@ -2,11 +2,19 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { ChimeSDKMeetingsClient, CreateMeetingCommand, CreateAttendeeCommand } from "@aws-sdk/client-chime-sdk-meetings";
+import http from 'http';
+import { TranscribeStreamingClient, StartMedicalStreamTranscriptionCommand } from "@aws-sdk/client-transcribe-streaming";
+import WebSocket, { WebSocketServer } from 'ws';
+import { spawn } from 'child_process';
 
 dotenv.config(); // Load environment variables from .env
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+const server = http.createServer(app); // Needed for WebSocket
+const wss = new WebSocketServer({ server });
+
 const chimeClient = new ChimeSDKMeetingsClient({
     region: "us-east-1",
     credentials: {
@@ -60,9 +68,116 @@ app.post('/join-meeting', async (req, res) => {
     }
 });
 
+const transcribeClient = new TranscribeStreamingClient({
+    region: "us-east-1",
+    credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    },
+});
 
+// Helper for PCM audio (browser may need conversion—see client notes)
+function ffmpegPCMAsyncIterable(ws) {
+    const ffmpeg = spawn('./bin/ffmpeg.exe', [
+        '-f', 'webm',
+        '-i', 'pipe:0',
+        '-f', 's16le',
+        '-ar', '16000',
+        '-ac', '1',
+        'pipe:1'
+    ]);
+    // Handle ffmpeg errors
+    ffmpeg.stderr.on('data', data => {
+        // Optional: console.error('ffmpeg:', data.toString());
+    });
+    ffmpeg.on('error', err => {
+        console.error('ffmpeg process error:', err);
+    });
+    ffmpeg.on('close', code => {
+        // Optional: console.log('ffmpeg closed', code);
+    });
 
-const port = 5000;
-app.listen(port, () => {
+    ws.on('message', (data) => {
+        // Feed WebM blob data to ffmpeg stdin
+        ffmpeg.stdin.write(data);
+    });
+    ws.on('close', () => {
+        ffmpeg.stdin.end();
+    });
+    ws.on('error', () => {
+        ffmpeg.stdin.end();
+    });
+
+    // Async generator: yields PCM for AWS
+    return {
+        [Symbol.asyncIterator]: async function* () {
+            for await (const chunk of ffmpeg.stdout) {
+                yield { AudioEvent: { AudioChunk: chunk } };
+            }
+        }
+    };
+}
+
+wss.on('connection', async (ws) => {
+    // 1. Receive audio format and session info from client as first message
+    let initialized = false;
+    let audioStream;
+    let transcription;
+    ws.on('message', async (msg, isBinary) => {
+        console.log('Received audio chunk:', msg.length);
+        if (!initialized) {
+            // Expect JSON: { languageCode, sampleRate, sessionId, [other options] }
+            try {
+                const initMsg = JSON.parse(isBinary ? msg.toString() : msg);
+                initialized = true;
+
+                // Setup streaming to AWS Transcribe Medical
+                audioStream = ffmpegPCMAsyncIterable(ws);
+                const command = new StartMedicalStreamTranscriptionCommand({
+                    LanguageCode: 'en-US',
+                    MediaSampleRateHertz: 16000,
+                    MediaEncoding: "pcm",
+                    Specialty: "PRIMARYCARE",
+                    Type: "CONVERSATION",
+                    AudioStream: audioStream,
+                });
+
+                const transcription = await transcribeClient.send(command);
+
+                // 2. Relay transcript results to the client
+                for await (const event of transcription.TranscriptResultStream) {
+                    if (event.TranscriptEvent) {
+                        const results = event.TranscriptEvent.Transcript.Results;
+                        for (const result of results) {
+                            if (result.Alternatives.length > 0) {
+                                const transcript = result.Alternatives[0].Transcript;
+                                // Send partial/final transcript back to client
+                                ws.send(JSON.stringify({
+                                    transcript,
+                                    isPartial: !result.IsPartial ? false : true,
+                                }));
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.log(err);
+                ws.send(JSON.stringify({ error: "Failed to initialize transcription: " + err.message }));
+                ws.close();
+            }
+        }
+        // else, further messages are audio and are pushed to audioStream (handled in getAudioStream)
+    });
+
+    ws.on('close', () => {
+        // Clean up if needed
+        if (audioStream && typeof audioStream.push === 'function') {
+            audioStream.push(null);
+        }
+    });
+});
+
+const port = 3000;
+server.listen(port, () => {
     console.log(`Server with Chime SDK running on port ${port}`);
 });

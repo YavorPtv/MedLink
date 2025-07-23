@@ -5,7 +5,7 @@ export default function Dashboard(){
     const [data, setData] = useState(null);
 
     useEffect(() => {
-        fetch('http://localhost:5000/api/hello')
+        fetch('http://localhost:3000/api/hello')
             .then(res => res.json())
             .then(data => setData(data.message));
 

@@ -36,6 +36,10 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
     const [muted, setMuted] = useState(false);
     const [videoOn, setVideoOn] = useState(true);
 
+    const [transcript, setTranscript] = useState('');
+    const wsRef = useRef(null); // Keep websocket reference for cleanup
+    const mediaRecorderRef = useRef(null); // For cleanup of recorder
+
     // Dummy patient/meeting info (replace with real info!)
     const participantRole = userName && userName.toLowerCase().includes('doctor') ? 'Doctor' : 'Patient';
 
@@ -103,6 +107,75 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
             .catch((e) => console.error('Could not start video input', e));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [audioVideo, videoDevices]);
+
+    useEffect(() => {
+        // Start transcription only if showTranscript is enabled
+        if (!showTranscript) return;
+
+        // 1. Open websocket to backend
+        const ws = new window.WebSocket('ws://localhost:3000'); // use wss:// in production!
+        wsRef.current = ws;
+
+        // 2. On open, send initial config
+        ws.onopen = () => {
+            ws.send(JSON.stringify({
+                languageCode: 'en-US', // Or whatever you use
+                sampleRate: 16000,     // Should match your backend & AWS config
+                sessionId: roomId,     // Optional, for grouping
+            }));
+        };
+
+        // 3. Listen for transcript updates from backend
+        ws.onmessage = (event) => {
+            try {
+                const { transcript: chunk, isPartial } = JSON.parse(event.data);
+                setTranscript(prev => isPartial ? (prev + ' ' + chunk) : (prev + ' ' + chunk + '\n'));
+            } catch (err) {
+                console.error("Transcript parse error", err);
+            }
+        };
+
+        // 4. Setup MediaRecorder to capture mic and send to backend
+        let mediaRecorder;
+        let audioStream;
+
+        async function startRecording() {
+            try {
+                // Get user's audio (mic)
+                audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new window.MediaRecorder(audioStream, { mimeType: 'audio/webm' }); // webm for MVP
+
+                mediaRecorderRef.current = mediaRecorder;
+
+                mediaRecorder.addEventListener('dataavailable', async (event) => {
+                    if (event.data.size > 0 && ws.readyState === 1) {
+                        // For MVP, just send webm blob. For prod, you must convert to PCM.
+                        const arrayBuffer = await event.data.arrayBuffer();
+                        ws.send(arrayBuffer); // The backend should decode or convert as needed.
+                    }
+                });
+
+                mediaRecorder.start(250); // send every 250ms
+            } catch (err) {
+                console.error('Could not start media recorder', err);
+            }
+        }
+
+        startRecording();
+
+        // --- Cleanup on component unmount or when transcript panel is closed ---
+        return () => {
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+                mediaRecorderRef.current.stop();
+            }
+            if (audioStream) {
+                audioStream.getTracks().forEach(track => track.stop());
+            }
+            if (wsRef.current && wsRef.current.readyState === 1) {
+                wsRef.current.close();
+            }
+        };
+    }, [showTranscript, roomId]);
 
     return (
         <Box sx={{
@@ -189,8 +262,8 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
                                         Chat goes here.
                                     </Typography>
                                 ) : (
-                                    <Typography variant="body2" color="text.secondary">
-                                        Transcript goes here.
+                                    <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
+                                        {transcript || "Transcript will appear here when active."}
                                     </Typography>
                                 )}
                             </Box>
