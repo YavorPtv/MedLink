@@ -41,6 +41,8 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
     const wsRef = useRef(null); // Keep websocket reference for cleanup
     const mediaRecorderRef = useRef(null); // For cleanup of recorder
 
+    const [startTime] = useState(new Date().toISOString());
+
     // Dummy patient/meeting info (replace with real info!)
     const participantRole = userName && userName.toLowerCase().includes('doctor') ? 'Doctor' : 'Patient';
 
@@ -65,8 +67,38 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
     };
 
     const handleLeave = async () => {
+        // Collect meeting record info
+        const meetingId = roomId;
+        const start = startTime;
+        const end = new Date().toISOString();
+        // Guess roles based on userName (improve with real auth/user roles!)
+        const isDoctor = userName && userName.toLowerCase().includes('doctor');
+        const doctorId = isDoctor ? userName : 'Unknown';
+        const patientId = !isDoctor ? userName : 'Unknown';
+        // Optionally, get doctorId/patientId from props/context if available
+
+        try {
+            await fetch('http://localhost:3000/save-record', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    meetingId,
+                    doctorId,
+                    patientId,
+                    startTime: start,
+                    endTime: end,
+                    transcript: transcriptLog, // array of {speaker, text}
+                    status: 'completed'
+                })
+            });
+        } catch (err) {
+            console.error('Failed to save meeting record:', err);
+            // Optionally show error to user
+        }
+
+        // Cleanup the call session
         await meetingManager.leave();
-        window.location.href = '/'; // or your desired route
+        window.location.href = '/'; // or another route
     };
 
     // ••• 1) Join once on mount •••

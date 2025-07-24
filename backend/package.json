@@ -12,6 +12,7 @@
   "type": "module",
   "dependencies": {
     "@aws-sdk/client-chime-sdk-meetings": "^3.844.0",
+    "@aws-sdk/client-dynamodb": "^3.848.0",
     "@aws-sdk/client-transcribe-streaming": "^3.848.0",
     "amazon-chime-sdk-component-library-react": "^3.7.0",
     "cors": "^2.8.5",

@@ -6,6 +6,7 @@ import http from 'http';
 import { TranscribeStreamingClient, StartMedicalStreamTranscriptionCommand } from "@aws-sdk/client-transcribe-streaming";
 import WebSocket, { WebSocketServer } from 'ws';
 import { spawn } from 'child_process';
+import { DynamoDBClient, PutItemCommand } from "@aws-sdk/client-dynamodb";
 
 dotenv.config(); // Load environment variables from .env
 const app = express();
@@ -177,6 +178,47 @@ wss.on('connection', async (ws) => {
             audioStream.push(null);
         }
     });
+});
+
+const dynamo = new DynamoDBClient({
+    region: "us-east-1",
+    credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    }
+});
+
+app.post('/save-record', async (req, res) => {
+    const {
+        meetingId,
+        doctorId,
+        patientId,
+        startTime,
+        endTime,
+        transcript, // Array of {speaker, text}
+        status
+    } = req.body;
+
+    try {
+        const params = {
+            TableName: "MedLinkMeetings",
+            Item: {
+                MeetingId: { S: meetingId },
+                DoctorId: { S: doctorId },
+                PatientId: { S: patientId },
+                StartTime: { S: startTime },
+                EndTime: { S: endTime },
+                Status: { S: status || "completed" },
+                Transcript: { S: JSON.stringify(transcript || []) }
+            }
+        };
+
+        await dynamo.send(new PutItemCommand(params));
+        res.json({ success: true });
+    } catch (err) {
+        console.error("Failed to save meeting record:", err);
+        res.status(500).json({ error: "Failed to save meeting record" });
+    }
 });
 
 const port = 3000;
