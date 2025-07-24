@@ -36,8 +36,8 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
     const [muted, setMuted] = useState(false);
     const [videoOn, setVideoOn] = useState(true);
 
-    const [transcript, setTranscript] = useState(''); // full, final transcript log
-    const [livePartial, setLivePartial] = useState(''); // current live partial
+    const [transcriptLog, setTranscriptLog] = useState([]); // array of {speaker, text}
+    const [livePartial, setLivePartial] = useState({ speaker: '', text: '' });
     const wsRef = useRef(null); // Keep websocket reference for cleanup
     const mediaRecorderRef = useRef(null); // For cleanup of recorder
 
@@ -123,20 +123,20 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
                 languageCode: 'en-US', // Or whatever you use
                 sampleRate: 16000,     // Should match your backend & AWS config
                 sessionId: roomId,     // Optional, for grouping
+                speaker: userName || 'Anonymous' // e.g. "Steven" or "Doctor"
             }));
         };
 
         // 3. Listen for transcript updates from backend
         ws.onmessage = (event) => {
             try {
-                const { transcript: chunk, isPartial } = JSON.parse(event.data);
+                const { transcript, isPartial, speaker } = JSON.parse(event.data);
                 if (isPartial) {
-                    setLivePartial(chunk); // show partial, do not append!
+                    setLivePartial({ speaker, text: transcript });
                 } else {
-                    setTranscript(prev => prev + ' ' + chunk); // append only final
-                    setLivePartial(''); // clear partial
+                    setTranscriptLog(prev => [...prev, { speaker, text: transcript }]);
+                    setLivePartial({ speaker: '', text: '' });
                 }
-                //setTranscript(prev => isPartial ? (prev + ' ' + chunk) : (prev + ' ' + chunk + '\n'));
             } catch (err) {
                 console.error("Transcript parse error", err);
             }
@@ -182,7 +182,7 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
                 wsRef.current.close();
             }
         };
-    }, [showTranscript, roomId]);
+    }, [showTranscript, roomId, userName]);
 
     return (
         <Box sx={{
@@ -269,7 +269,18 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
                                         Chat goes here.
                                     </Typography>
                                 ) : (
-                                    <Typography variant="body2">{transcript} <i style={{ opacity: 0.7 }}>{livePartial}</i></Typography>
+                                    <Box>
+                                        {transcriptLog.map((entry, i) => (
+                                            <Typography key={i} variant="body2">
+                                                <b>{entry.speaker}:</b> {entry.text}
+                                            </Typography>
+                                        ))}
+                                        {livePartial.text && (
+                                            <Typography variant="body2" style={{ opacity: 0.7 }}>
+                                                <b>{livePartial.speaker}:</b> <i>{livePartial.text}</i>
+                                            </Typography>
+                                        )}
+                                    </Box>
                                 )}
                             </Box>
                             {showChat && (

@@ -129,6 +129,7 @@ wss.on('connection', async (ws) => {
             // Expect JSON: { languageCode, sampleRate, sessionId, [other options] }
             try {
                 const initMsg = JSON.parse(isBinary ? msg.toString() : msg);
+                const speaker = initMsg.speaker || "Unknown";
                 initialized = true;
 
                 // Setup streaming to AWS Transcribe Medical
@@ -155,6 +156,7 @@ wss.on('connection', async (ws) => {
                                 ws.send(JSON.stringify({
                                     transcript,
                                     isPartial: !result.IsPartial ? false : true,
+                                    speaker
                                 }));
                             }
                         }
