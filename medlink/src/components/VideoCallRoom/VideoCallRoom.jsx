@@ -110,8 +110,6 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
     }, [audioVideo, videoDevices]);
 
     useEffect(() => {
-        // Start transcription only if showTranscript is enabled
-        if (!showTranscript) return;
 
         // 1. Open websocket to backend
         const ws = new window.WebSocket('ws://localhost:3000'); // use wss:// in production!
