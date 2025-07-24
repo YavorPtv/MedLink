@@ -36,7 +36,8 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
     const [muted, setMuted] = useState(false);
     const [videoOn, setVideoOn] = useState(true);
 
-    const [transcript, setTranscript] = useState('');
+    const [transcript, setTranscript] = useState(''); // full, final transcript log
+    const [livePartial, setLivePartial] = useState(''); // current live partial
     const wsRef = useRef(null); // Keep websocket reference for cleanup
     const mediaRecorderRef = useRef(null); // For cleanup of recorder
 
@@ -129,7 +130,13 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
         ws.onmessage = (event) => {
             try {
                 const { transcript: chunk, isPartial } = JSON.parse(event.data);
-                setTranscript(prev => isPartial ? (prev + ' ' + chunk) : (prev + ' ' + chunk + '\n'));
+                if (isPartial) {
+                    setLivePartial(chunk); // show partial, do not append!
+                } else {
+                    setTranscript(prev => prev + ' ' + chunk); // append only final
+                    setLivePartial(''); // clear partial
+                }
+                //setTranscript(prev => isPartial ? (prev + ' ' + chunk) : (prev + ' ' + chunk + '\n'));
             } catch (err) {
                 console.error("Transcript parse error", err);
             }
@@ -262,9 +269,7 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
                                         Chat goes here.
                                     </Typography>
                                 ) : (
-                                    <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
-                                        {transcript || "Transcript will appear here when active."}
-                                    </Typography>
+                                    <Typography variant="body2">{transcript} <i style={{ opacity: 0.7 }}>{livePartial}</i></Typography>
                                 )}
                             </Box>
                             {showChat && (
