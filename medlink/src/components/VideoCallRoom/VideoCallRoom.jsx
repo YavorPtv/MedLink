@@ -5,7 +5,6 @@ import {
     useLocalVideo,
     useVideoInputs,
     VideoTileGrid,
-    LocalVideo,
 } from 'amazon-chime-sdk-component-library-react';
 import { MeetingSessionConfiguration } from 'amazon-chime-sdk-js';
 import { useRef } from 'react';
@@ -22,6 +21,8 @@ import CallEndIcon from '@mui/icons-material/CallEnd';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useState } from 'react';
+import ChatPanel from '../ChatPanel/ChatPanel';
+import VideoTranscriptionPanel from "../VideoTranscriptionPanel/VideoTranscriptionPanel";
 
 export default function VideoCallRoom({ meetingData, roomId, userName }) {
     const meetingManager = useMeetingManager();
@@ -37,14 +38,22 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
     const [videoOn, setVideoOn] = useState(true);
 
     const [transcriptLog, setTranscriptLog] = useState([]); // array of {speaker, text}
-    const [livePartial, setLivePartial] = useState({ speaker: '', text: '' });
-    const wsRef = useRef(null); // Keep websocket reference for cleanup
-    const mediaRecorderRef = useRef(null); // For cleanup of recorder
 
     const [startTime] = useState(new Date().toISOString());
 
     // Dummy patient/meeting info (replace with real info!)
     const participantRole = userName && userName.toLowerCase().includes('doctor') ? 'Doctor' : 'Patient';
+
+    const [chatMessages, setChatMessages] = useState([]);
+
+    const handleNewTranscriptLine = ({ speaker, text }) => {
+        setTranscriptLog((log) => [...log, { speaker, text }]);
+    };
+
+    const handleSendChatMessage = (msg) => {
+        setChatMessages((msgs) => [...msgs, msg]);
+        // TODO: later: send over WebSocket here
+    };
 
     const handleMute = () => {
         if (!audioVideo) return;
@@ -141,79 +150,6 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [audioVideo, videoDevices]);
 
-    useEffect(() => {
-
-        // 1. Open websocket to backend
-        const ws = new window.WebSocket('ws://localhost:3000'); // use wss:// in production!
-        wsRef.current = ws;
-
-        // 2. On open, send initial config
-        ws.onopen = () => {
-            ws.send(JSON.stringify({
-                languageCode: 'en-US', // Or whatever you use
-                sampleRate: 16000,     // Should match your backend & AWS config
-                sessionId: roomId,     // Optional, for grouping
-                speaker: userName || 'Anonymous' // e.g. "Steven" or "Doctor"
-            }));
-        };
-
-        // 3. Listen for transcript updates from backend
-        ws.onmessage = (event) => {
-            try {
-                const { transcript, isPartial, speaker } = JSON.parse(event.data);
-                if (isPartial) {
-                    setLivePartial({ speaker, text: transcript });
-                } else {
-                    setTranscriptLog(prev => [...prev, { speaker, text: transcript }]);
-                    setLivePartial({ speaker: '', text: '' });
-                }
-            } catch (err) {
-                console.error("Transcript parse error", err);
-            }
-        };
-
-        // 4. Setup MediaRecorder to capture mic and send to backend
-        let mediaRecorder;
-        let audioStream;
-
-        async function startRecording() {
-            try {
-                // Get user's audio (mic)
-                audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new window.MediaRecorder(audioStream, { mimeType: 'audio/webm' }); // webm for MVP
-
-                mediaRecorderRef.current = mediaRecorder;
-
-                mediaRecorder.addEventListener('dataavailable', async (event) => {
-                    if (event.data.size > 0 && ws.readyState === 1) {
-                        // For MVP, just send webm blob. For prod, you must convert to PCM.
-                        const arrayBuffer = await event.data.arrayBuffer();
-                        ws.send(arrayBuffer); // The backend should decode or convert as needed.
-                    }
-                });
-
-                mediaRecorder.start(250); // send every 250ms
-            } catch (err) {
-                console.error('Could not start media recorder', err);
-            }
-        }
-
-        startRecording();
-
-        // --- Cleanup on component unmount or when transcript panel is closed ---
-        return () => {
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-                mediaRecorderRef.current.stop();
-            }
-            if (audioStream) {
-                audioStream.getTracks().forEach(track => track.stop());
-            }
-            if (wsRef.current && wsRef.current.readyState === 1) {
-                wsRef.current.close();
-            }
-        };
-    }, [showTranscript, roomId, userName]);
-
     return (
         <Box sx={{
             height: '100vh',
@@ -278,46 +214,34 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
 
                 {/* Right Side Panel: Chat or Transcript */}
                 {(showChat || showTranscript) && (
-                    <Box sx={{
-                        width: 340,
-                        bgcolor: '#f4fafd',
-                        borderLeft: '1px solid #e0e0e0',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        height: '100%',
-                        transition: 'width 0.3s',
-                        minWidth: 0
-                    }}>
-                        <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', height: '100%' }}>
-                            <Typography variant="h6" sx={{ mb: 1 }}>
-                                {showChat ? "Chat" : "Transcription"}
-                            </Typography>
-                            <Divider sx={{ mb: 1 }} />
-                            <Box sx={{ flex: 1, overflowY: 'auto', mb: showChat ? 2 : 0 }}>
+                    <Box
+                        sx={{
+                            width: 340,
+                            bgcolor: "#f4fafd",
+                            borderLeft: "1px solid #e0e0e0",
+                            display: "flex",
+                            flexDirection: "column",
+                            height: "100%",
+                            transition: "width 0.3s",
+                            minWidth: 0,
+                        }}
+                    >
+                        <Box sx={{ p: 2, display: "flex", flexDirection: "column", height: "100%" }}>
+                            <Box sx={{ flex: 1, overflowY: "auto" }}>
                                 {showChat ? (
-                                    <Typography variant="body2" color="text.secondary">
-                                        Chat goes here.
-                                    </Typography>
+                                    <ChatPanel
+                                        currentUser={{ id: "dummyUserId", name: userName }}
+                                        messages={chatMessages}
+                                        onSend={handleSendChatMessage}
+                                    />
                                 ) : (
-                                    <Box>
-                                        {transcriptLog.map((entry, i) => (
-                                            <Typography key={i} variant="body2">
-                                                <b>{entry.speaker}:</b> {entry.text}
-                                            </Typography>
-                                        ))}
-                                        {livePartial.text && (
-                                            <Typography variant="body2" style={{ opacity: 0.7 }}>
-                                                <b>{livePartial.speaker}:</b> <i>{livePartial.text}</i>
-                                            </Typography>
-                                        )}
-                                    </Box>
+                                    <VideoTranscriptionPanel
+                                        roomId={roomId}
+                                        userName={userName}
+                                        onFinalTranscript={handleNewTranscriptLine} // Optionally handle saving transcript line-by-line
+                                    />
                                 )}
                             </Box>
-                            {showChat && (
-                                <Box sx={{}}>
-                                    {/* TODO: Chat input here */}
-                                </Box>
-                            )}
                         </Box>
                     </Box>
                 )}
