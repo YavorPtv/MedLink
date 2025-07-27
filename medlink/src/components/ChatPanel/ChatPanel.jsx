@@ -2,13 +2,11 @@ import { useRef, useEffect, useState } from "react";
 import { Box, Typography, TextField, IconButton, Paper, Stack } from "@mui/material";
 import SendIcon from "@mui/icons-material/Send";
 
-// Dummy current user (replace with real auth/session info)
-const CURRENT_USER = {
-    id: "user1",
-    name: "You",
-};
-
-export default function ChatPanel({ currentUser = CURRENT_USER, messages, onSend }) {
+export default function ChatPanel({ 
+    currentUser,
+    messages,
+    onSend 
+}) {
     const [input, setInput] = useState("");
     const messagesEndRef = useRef(null);
 

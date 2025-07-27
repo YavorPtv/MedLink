@@ -8,7 +8,7 @@ import {
 } from 'amazon-chime-sdk-component-library-react';
 import { MeetingSessionConfiguration } from 'amazon-chime-sdk-js';
 import { useRef } from 'react';
-import { Box, AppBar, Toolbar, IconButton, Button, Drawer, Typography, Divider, Collapse, Paper, Grid } from '@mui/material';
+import { Box, AppBar, Toolbar, IconButton, Typography, Collapse, Paper } from '@mui/material';
 import ChatIcon from '@mui/icons-material/Chat';
 import SubtitlesIcon from '@mui/icons-material/Subtitles';
 import InfoIcon from '@mui/icons-material/Info';
@@ -18,13 +18,15 @@ import MicIcon from '@mui/icons-material/Mic';
 import MicOffIcon from '@mui/icons-material/MicOff';
 import ScreenShareIcon from '@mui/icons-material/ScreenShare';
 import CallEndIcon from '@mui/icons-material/CallEnd';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useState } from 'react';
 import ChatPanel from '../ChatPanel/ChatPanel';
 import VideoTranscriptionPanel from "../VideoTranscriptionPanel/VideoTranscriptionPanel";
 
-export default function VideoCallRoom({ meetingData, roomId, userName }) {
+export default function VideoCallRoom({ 
+    meetingData, 
+    roomId, 
+    userName 
+}) {
     const meetingManager = useMeetingManager();
     const audioVideo = useAudioVideo();
     const { toggleVideo } = useLocalVideo();
@@ -49,9 +51,21 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
     const wsRef = useRef(null);
     const mediaRecorderRef = useRef(null);
 
+    const currentUser = { id: crypto.randomUUID(), name: userName || "You" };
+    //TODO: fix bug: when another user joins the previous cant send messages and neither one's messages are recieved by the other user
     const handleSendChatMessage = (msg) => {
-        setChatMessages((msgs) => [...msgs, msg]);
-        // TODO: later: send over WebSocket here
+        // 1. Send to backend websocket
+        console.log(wsRef.current);
+        if (wsRef.current && wsRef.current.readyState === 1) {
+            wsRef.current.send(JSON.stringify({
+                action: "chat-message",
+                meetingId: roomId,                  // Pass your room/meeting ID
+                senderId: currentUser.id,           // Set to real user ID if available
+                senderName: currentUser.name,       // Set to real user name
+                text: msg.text,                     // The text from the input
+                timestamp: new Date().toISOString() // Add a timestamp
+            }));
+        }
     };
 
     const handleMute = () => {
@@ -150,34 +164,51 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
     }, [audioVideo, videoDevices]);
 
     useEffect(() => {
-        // --- Open WebSocket ---
-        const ws = new window.WebSocket('ws://localhost:3000'); // Change for prod!
+        // 1. Open websocket to backend
+        const ws = new window.WebSocket('ws://localhost:3000'); // use wss:// in production!
         wsRef.current = ws;
 
+        // 2. On open, send initial config (session join for transcription)
         ws.onopen = () => {
             ws.send(JSON.stringify({
-                languageCode: 'en-US',
-                sampleRate: 16000,
-                sessionId: roomId,
-                speaker: userName || 'Anonymous',
+                languageCode: 'en-US', // Or whatever you use
+                sampleRate: 16000,     // Should match your backend & AWS config
+                sessionId: roomId,     // For grouping participants
+                speaker: userName || 'Anonymous'
             }));
         };
 
+        // 3. Listen for *all* backend messages (transcription AND chat)
         ws.onmessage = (event) => {
             try {
-                const { transcript, isPartial, speaker } = JSON.parse(event.data);
-                if (isPartial) {
-                    setLivePartial({ speaker, text: transcript });
-                } else {
-                    setTranscriptLog(prev => [...prev, { speaker, text: transcript }]);
-                    setLivePartial({ speaker: "", text: "" });
+                const data = JSON.parse(event.data);
+
+                // --- Handle incoming chat message ---
+                if (data.type === "chat-message") {
+                    // Append to your chat state
+                    setChatMessages((msgs) => [...msgs, {
+                        senderId: data.senderId,
+                        senderName: data.senderName,
+                        text: data.text,
+                        timestamp: data.timestamp,
+                    }]);
                 }
+                // --- Handle incoming transcript message ---
+                else if (data.transcript !== undefined) {
+                    if (data.isPartial) {
+                        setLivePartial({ speaker: data.speaker, text: data.transcript });
+                    } else {
+                        setTranscriptLog(prev => [...prev, { speaker: data.speaker, text: data.transcript }]);
+                        setLivePartial({ speaker: '', text: '' });
+                    }
+                }
+                // ...handle other message types if needed...
             } catch (err) {
-                console.error("Transcript parse error", err);
+                console.error("WebSocket message parse error:", err);
             }
         };
 
-        // --- Setup MediaRecorder ---
+        // 4. Setup MediaRecorder to capture mic and send to backend
         let mediaRecorder;
         let audioStream;
 
@@ -185,16 +216,17 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
             try {
                 audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 mediaRecorder = new window.MediaRecorder(audioStream, { mimeType: 'audio/webm' });
+
                 mediaRecorderRef.current = mediaRecorder;
 
-                mediaRecorder.addEventListener("dataavailable", async (event) => {
+                mediaRecorder.addEventListener('dataavailable', async (event) => {
                     if (event.data.size > 0 && ws.readyState === 1) {
                         const arrayBuffer = await event.data.arrayBuffer();
                         ws.send(arrayBuffer);
                     }
                 });
 
-                mediaRecorder.start(250);
+                mediaRecorder.start(250); // send every 250ms
             } catch (err) {
                 console.error('Could not start media recorder', err);
             }
@@ -202,13 +234,13 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
 
         startRecording();
 
-        // --- Cleanup ---
+        // --- Cleanup on component unmount or when transcript panel is closed ---
         return () => {
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
                 mediaRecorderRef.current.stop();
             }
             if (audioStream) {
-                audioStream.getTracks().forEach((track) => track.stop());
+                audioStream.getTracks().forEach(track => track.stop());
             }
             if (wsRef.current && wsRef.current.readyState === 1) {
                 wsRef.current.close();
@@ -296,7 +328,7 @@ export default function VideoCallRoom({ meetingData, roomId, userName }) {
                             <Box sx={{ flex: 1, overflowY: "auto" }}>
                                 {showChat ? (
                                     <ChatPanel
-                                        currentUser={{ id: "dummyUserId", name: userName }}
+                                        currentUser={currentUser}
                                         messages={chatMessages}
                                         onSend={handleSendChatMessage}
                                     />

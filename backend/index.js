@@ -119,21 +119,39 @@ function ffmpegPCMAsyncIterable(ws) {
     };
 }
 
+const meetingRooms = {};
+
+function addToRoom(meetingId, ws) {
+    if (!meetingRooms[meetingId]) meetingRooms[meetingId] = new Set();
+    meetingRooms[meetingId].add(ws);
+}
+
+function removeFromRooms(ws) {
+    for (const sockets of Object.values(meetingRooms)) {
+        sockets.delete(ws);
+    }
+}
+
 wss.on('connection', async (ws) => {
-    // 1. Receive audio format and session info from client as first message
     let initialized = false;
     let audioStream;
-    let transcription;
+    let currentMeetingId = null;
+
     ws.on('message', async (msg, isBinary) => {
-        console.log('Received audio chunk:', msg.length);
         if (!initialized) {
-            // Expect JSON: { languageCode, sampleRate, sessionId, [other options] }
+            // Always expect JSON for session init first
             try {
                 const initMsg = JSON.parse(isBinary ? msg.toString() : msg);
-                const speaker = initMsg.speaker || "Unknown";
+                if (!initMsg.sessionId) {
+                    ws.send(JSON.stringify({ error: "Must initialize session first" }));
+                    ws.close();
+                    return;
+                }
+                currentMeetingId = initMsg.sessionId;
                 initialized = true;
+                addToRoom(currentMeetingId, ws);
 
-                // Setup streaming to AWS Transcribe Medical
+                // Transcription setup (unchanged)
                 audioStream = ffmpegPCMAsyncIterable(ws);
                 const command = new StartMedicalStreamTranscriptionCommand({
                     LanguageCode: 'en-US',
@@ -143,37 +161,59 @@ wss.on('connection', async (ws) => {
                     Type: "CONVERSATION",
                     AudioStream: audioStream,
                 });
-
                 const transcription = await transcribeClient.send(command);
-
-                // 2. Relay transcript results to the client
                 for await (const event of transcription.TranscriptResultStream) {
                     if (event.TranscriptEvent) {
                         const results = event.TranscriptEvent.Transcript.Results;
                         for (const result of results) {
                             if (result.Alternatives.length > 0) {
                                 const transcript = result.Alternatives[0].Transcript;
-                                // Send partial/final transcript back to client
                                 ws.send(JSON.stringify({
                                     transcript,
-                                    isPartial: !result.IsPartial ? false : true,
-                                    speaker
+                                    isPartial: !!result.IsPartial,
+                                    speaker: initMsg.speaker || "Unknown"
                                 }));
                             }
                         }
                     }
                 }
             } catch (err) {
-                console.log(err);
                 ws.send(JSON.stringify({ error: "Failed to initialize transcription: " + err.message }));
                 ws.close();
             }
+            return;
         }
-        // else, further messages are audio and are pushed to audioStream (handled in getAudioStream)
+
+        // ---- After session is initialized ----
+        // 1. Try to parse JSON (chat message)
+        try {
+            const parsed = JSON.parse(isBinary ? msg.toString() : msg);
+            if (parsed.action === "chat-message") {
+                const chatMsg = {
+                    type: "chat-message",
+                    meetingId: parsed.meetingId,
+                    senderId: parsed.senderId,
+                    senderName: parsed.senderName,
+                    text: parsed.text,
+                    timestamp: parsed.timestamp,
+                };
+                if (meetingRooms[parsed.meetingId]) {
+                    for (const client of meetingRooms[parsed.meetingId]) {
+                        if (client.readyState === ws.OPEN) {
+                            client.send(JSON.stringify(chatMsg));
+                        }
+                    }
+                }
+                return;
+            }
+        } catch (err) {
+            // Not JSON: must be audio (handled by ffmpegPCMAsyncIterable)
+        }
+        // If not JSON, assume it's audio (handled by ffmpeg async iterator)
     });
 
     ws.on('close', () => {
-        // Clean up if needed
+        removeFromRooms(ws);
         if (audioStream && typeof audioStream.push === 'function') {
             audioStream.push(null);
         }
