@@ -1,82 +1,11 @@
-import { useState, useRef, useEffect } from "react";
 import { Box, Typography, Paper, Stack } from "@mui/material";
 import SubtitlesIcon from "@mui/icons-material/Subtitles";
 
 // Props: roomId, userName, onFinalTranscript (optional callback)
-export default function VideoTranscriptionPanel({ roomId, userName, onFinalTranscript }) {
-    const [transcriptLog, setTranscriptLog] = useState([]); // {speaker, text}
-    const [livePartial, setLivePartial] = useState({ speaker: "", text: "" });
-    const wsRef = useRef(null);
-    const mediaRecorderRef = useRef(null);
-
-    useEffect(() => {
-        // --- Open WebSocket ---
-        const ws = new window.WebSocket('ws://localhost:3000'); // Change for prod!
-        wsRef.current = ws;
-
-        ws.onopen = () => {
-            ws.send(JSON.stringify({
-                languageCode: 'en-US',
-                sampleRate: 16000,
-                sessionId: roomId,
-                speaker: userName || 'Anonymous',
-            }));
-        };
-
-        ws.onmessage = (event) => {
-            try {
-                const { transcript, isPartial, speaker } = JSON.parse(event.data);
-                if (isPartial) {
-                    setLivePartial({ speaker, text: transcript });
-                } else {
-                    setTranscriptLog(prev => [...prev, { speaker, text: transcript }]);
-                    setLivePartial({ speaker: "", text: "" });
-                    if (onFinalTranscript) onFinalTranscript({ speaker, text: transcript });
-                }
-            } catch (err) {
-                console.error("Transcript parse error", err);
-            }
-        };
-
-        // --- Setup MediaRecorder ---
-        let mediaRecorder;
-        let audioStream;
-
-        async function startRecording() {
-            try {
-                audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new window.MediaRecorder(audioStream, { mimeType: 'audio/webm' });
-                mediaRecorderRef.current = mediaRecorder;
-
-                mediaRecorder.addEventListener("dataavailable", async (event) => {
-                    if (event.data.size > 0 && ws.readyState === 1) {
-                        const arrayBuffer = await event.data.arrayBuffer();
-                        ws.send(arrayBuffer);
-                    }
-                });
-
-                mediaRecorder.start(250);
-            } catch (err) {
-                console.error('Could not start media recorder', err);
-            }
-        }
-
-        startRecording();
-
-        // --- Cleanup ---
-        return () => {
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-                mediaRecorderRef.current.stop();
-            }
-            if (audioStream) {
-                audioStream.getTracks().forEach((track) => track.stop());
-            }
-            if (wsRef.current && wsRef.current.readyState === 1) {
-                wsRef.current.close();
-            }
-        };
-    }, [roomId, userName, onFinalTranscript]);
-
+export default function VideoTranscriptionPanel({ 
+    transcriptLog, 
+    livePartial
+}) {
     return (
         <Paper
             elevation={3}
