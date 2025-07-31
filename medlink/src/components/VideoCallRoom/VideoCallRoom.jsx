@@ -79,10 +79,11 @@ export default function VideoCallRoom({
     }), [roomId, userName]);
 
     const { ws, connected, sendRaw } = usePersistentWebSocket(
-        'ws://localhost:3000',  // change for prod
+        'ws://localhost:3000',  //! change for prod
         {
             onJsonMessage: handleJsonMessage,
-            sessionInitJson
+            sessionInitJson,
+            showTranscript //! delete for prod
         }
     );
 
@@ -205,6 +206,7 @@ export default function VideoCallRoom({
 
     // --- For audio sending: ---
     useEffect(() => {
+        if (!showTranscript) return;
         let mediaRecorder;
         let audioStream;
 
@@ -237,7 +239,7 @@ export default function VideoCallRoom({
             }
             if (audioStream) audioStream.getTracks().forEach(track => track.stop());
         };
-    }, [connected, sendRaw, ws]);
+    }, [connected, sendRaw, showTranscript, ws]);
 
 
     return (

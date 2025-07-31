@@ -138,6 +138,7 @@ wss.on('connection', async (ws) => {
     let currentMeetingId = null;
 
     ws.on('message', async (msg, isBinary) => {
+        console.log(msg.length);
         if (!initialized) {
             // Always expect JSON for session init first
             try {

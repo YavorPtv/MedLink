@@ -14,7 +14,8 @@ export function usePersistentWebSocket(
         onOpen,
         onClose,
         onError,
-        sessionInitJson
+        sessionInitJson,
+        showTranscript //! change for prod
     } = {}
 ) {
     const wsRef = useRef(null);
@@ -78,6 +79,7 @@ export function usePersistentWebSocket(
     }, [url, protocols, sessionInitJson, onOpen, onClose, autoReconnect, reconnectInterval, onError, onJsonMessage, onRawMessage]);
 
     useEffect(() => {
+        if (!showTranscript) return; //! change for prod
         shouldReconnectRef.current = true;
         connect();
         return () => {
@@ -85,7 +87,7 @@ export function usePersistentWebSocket(
             if (wsRef.current) wsRef.current.close();
             if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
         };
-    }, [connect]);
+    }, [connect, showTranscript]); //! change for prod
 
     // Sending helpers
     const sendJson = useCallback((obj) => {
